@@ -158,14 +158,6 @@
   version = "v1.1.2"
 
 [[projects]]
-  branch = "master"
-  digest = "1:6c3fed10dab04d3594c76c68cb1ea982d9c3d6190661447044bb4248c3ca46ec"
-  name = "github.com/nasa9084/syg"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "6b02bc58a3235904932f55fc0885d4ac62a0b9b2"
-
-[[projects]]
   digest = "1:95741de3af260a92cc5c7f3f3061e85273f5a81b5db20d4bd68da74bd521675e"
   name = "github.com/pelletier/go-toml"
   packages = ["."]
@@ -319,7 +311,6 @@
     "github.com/99designs/keyring",
     "github.com/fatih/color",
     "github.com/mitchellh/go-homedir",
-    "github.com/nasa9084/syg",
     "github.com/skratchdot/open-golang/open",
     "github.com/spf13/cobra",
     "github.com/spf13/viper",

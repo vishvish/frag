@@ -16,7 +16,7 @@
 
 package main
 
-import "github.com/vishvish/lazy-freeagent/cmd"
+import "github.com/vishvish/frag/cmd"
 
 func main() {
 	cmd.Execute()
