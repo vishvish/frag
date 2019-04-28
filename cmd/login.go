@@ -20,16 +20,14 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
-	"net/url"
-	"time"
-
 	"github.com/99designs/keyring"
 	"github.com/fatih/color"
 	"github.com/skratchdot/open-golang/open"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
+	"log"
+	"net/http"
+	"net/url"
 )
 
 // loginCmd represents the login command
@@ -51,52 +49,32 @@ to quickly create a Cobra application.`,
 var (
 	conf         *oauth2.Config
 	ctx          context.Context
-	serviceName  = "com.tfto.myFreeAgent."
+	serviceName  = "io.koothooloo.frag."
 	clientID     = "***REMOVED***"
 	clientSecret = "***REMOVED***"
+	fragUrl      string
 	srv          http.Server
 )
 
 func init() {
 	rootCmd.AddCommand(loginCmd)
-
-	//s := retrieveItem()
-	//
-	//var t oauth2.Token
-	//err := json.Unmarshal(s.Data, &t)
-	//if err != nil {
-	//	initAuth()
-	//} else {
-	//	log.Printf("Access: %s", t.AccessToken)
-	//	log.Printf("Refresh: %s", t.RefreshToken)
-	//}
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// loginCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// loginCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 func checkAuth() {
-	s := retrieveItem()
-	var t oauth2.Token
-	err := json.Unmarshal(s.Data, &t)
-	if err != nil {
+	s, retrieveError := retrieveItem()
+	if retrieveError != nil {
 		initAuth()
 	} else {
 		log.Println("Token found in keychain.")
-		// log.Printf("Access: %s", t.AccessToken)
-		// log.Printf("Refresh: %s", t.RefreshToken)
+		var t oauth2.Token
+		err := json.Unmarshal(s.Data, &t)
+		if err != nil {
+			initAuth()
+		}
 	}
 }
 
 func initAuth() {
-	ctx = context.Background()
 	conf = &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
@@ -118,44 +96,65 @@ func initAuth() {
 
 	// Redirect user to consent page to ask for permission
 	// for the scopes specified above.
-	url := conf.AuthCodeURL("state", oauth2.AccessTypeOffline)
-
+	fragUrl = conf.AuthCodeURL("state", oauth2.AccessTypeOffline)
 	log.Println(color.CyanString("You will now be taken to your browser for authentication"))
-	time.Sleep(1 * time.Second)
-	open.Run(url)
-	time.Sleep(1 * time.Second)
-	log.Printf("Authentication URL: %s\n", url)
+	//time.Sleep(1 * time.Second)
+	log.Printf("Authentication URL: %s\n", fragUrl)
+	open.Run(fragUrl)
+	//time.Sleep(1 * time.Second)
 
-	http.HandleFunc("/oauth/callback", callbackHandler)
-	log.Fatal(http.ListenAndServe(":9999", nil))
-
-	//srv = *startHTTPServer()
+	startHTTPServer()
+	log.Printf("Finished login")
 }
 
-func startHTTPServer() *http.Server {
-	s := &http.Server{Addr: ":9999"}
+func startHTTPServer() {
+	m := http.NewServeMux()
+	srv = http.Server{Addr: ":9999", Handler: m}
+	ctx2, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	http.HandleFunc("/oauth/callback", callbackHandler)
-	log.Fatal(s.ListenAndServe())
+	m.HandleFunc("/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
+		queryParts, _ := url.ParseQuery(r.URL.RawQuery)
 
-	//http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-	//	io.WriteString(w, "hello world\n")
-	//})
+		// Use the authorization code that is pushed to the redirect
+		// URL.
+		code := queryParts["code"][0]
+		//log.Printf("code: %s\n", code)
 
-	go func() {
-		// returns ErrServerClosed on graceful close
-		if err := s.ListenAndServe(); err != http.ErrServerClosed {
-			// NOTE: there is a chance that next line won't have time to run,
-			// as main() doesn't wait for this goroutine to stop. don't use
-			// code with race conditions like these for production. see post
-			// comments below on more discussion on how to handle this.
-			log.Fatalf("ListenAndServe(): %s", err)
+		// Exchange will do the handshake to retrieve the initial access token.
+		tok, err := conf.Exchange(ctx2, code)
+		if err != nil {
+			log.Fatal(err)
 		}
-		fmt.Println("Server gracefully stopped")
-	}()
 
-	// returning reference so caller can call Shutdown()
-	return &srv
+		storeItem(tokenToItem(tok))
+
+		// The HTTP Client returned by conf.Client will refresh the token as necessary.
+		client := conf.Client(ctx2, tok)
+
+		resp, err := client.Get("https://api.freeagent.com/v2/users/me")
+		if err != nil {
+			log.Fatal(err)
+		} else {
+			msg := "<p><strong>Success!</strong></p>"
+			msg = msg + "<p>You are authenticated and can now return to the CLI.</p>"
+			fmt.Fprintf(w, msg)
+
+			cancel()
+			log.Println(color.CyanString("Authentication successful"))
+		}
+		defer resp.Body.Close()
+	})
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
+	select {
+	case <-ctx2.Done():
+		// Shutdown the server when the context is canceled
+		srv.Shutdown(ctx2)
+	}
 }
 
 func tokenToItem(tok *oauth2.Token) keyring.Item {
@@ -175,17 +174,16 @@ func tokenToItem(tok *oauth2.Token) keyring.Item {
 	return item
 }
 
-func itemToToken(item keyring.Item) oauth2.Token {
-	var t oauth2.Token
-	err := json.Unmarshal(item.Data, &t)
-	if err != nil {
-		panic(err)
-	}
-	return t
-}
+//func itemToToken(item keyring.Item) oauth2.Token {
+//	var t oauth2.Token
+//	err := json.Unmarshal(item.Data, &t)
+//	if err != nil {
+//		panic(err)
+//	}
+//	return t
+//}
 
 func storeItem(item keyring.Item) {
-
 	log.Println("Setting " + item.Key)
 
 	ring, _ := keyring.Open(keyring.Config{
@@ -199,7 +197,7 @@ func storeItem(item keyring.Item) {
 	}
 }
 
-func retrieveItem() keyring.Item {
+func retrieveItem() (keyring.Item, error) {
 	log.Println("Getting " + serviceName + "token")
 
 	ring, _ := keyring.Open(keyring.Config{
@@ -208,43 +206,6 @@ func retrieveItem() keyring.Item {
 	})
 
 	i, err := ring.Get(serviceName + "token")
-	if err != nil {
-		initAuth()
-	}
 
-	return i
-}
-
-func callbackHandler(w http.ResponseWriter, r *http.Request) {
-
-	queryParts, _ := url.ParseQuery(r.URL.RawQuery)
-
-	// Use the authorization code that is pushed to the redirect
-	// URL.
-	code := queryParts["code"][0]
-	//log.Printf("code: %s\n", code)
-
-	// Exchange will do the handshake to retrieve the initial access token.
-	tok, err := conf.Exchange(ctx, code)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	storeItem(tokenToItem(tok))
-
-	// The HTTP Client returned by conf.Client will refresh the token as necessary.
-	client := conf.Client(ctx, tok)
-
-	resp, err := client.Get("https://api.freeagent.com/v2/users/me")
-	if err != nil {
-		log.Fatal(err)
-	} else {
-		log.Println(color.CyanString("Authentication successful\n"))
-	}
-
-	defer resp.Body.Close()
-	// show success page
-	msg := "<p><strong>Success!</strong></p>"
-	msg = msg + "<p>You are authenticated and can now return to the CLI.</p>"
-	fmt.Fprintf(w, msg)
+	return i, err
 }

@@ -16,13 +16,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"github.com/fatih/color"
-	"golang.org/x/oauth2"
-	"io/ioutil"
-	"log"
-	"net/http"
-
 	"github.com/spf13/cobra"
 )
 
@@ -36,36 +29,29 @@ and usage of using your command. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		s := retrieveItem()
-
-		var t oauth2.Token
-		err := json.Unmarshal(s.Data, &t)
-		if err != nil {
-			initAuth()
-		}
-
-		// The HTTP Client returned by conf.Client will refresh the token as necessary.
-		client := conf.Client(ctx, &t)
-
-		resp, err := client.Get("https://api.freeagent.com/v2/projects")
-		if err != nil {
-			log.Fatal(err)
-		} else {
-			log.Println(color.CyanString("Authentication successful\n"))
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusOK {
-			bodyBytes, err2 := ioutil.ReadAll(resp.Body)
-			if err2 != nil {
-				log.Fatal(err2)
-			} else {
-				bodyString := string(bodyBytes)
-				log.Println(color.GreenString(bodyString))
-			}
-		}
-	},
+	//Run: func(cmd *cobra.Command, args []string) {
+	//		//checkAuth()
+	//	// The HTTP Client returned by conf.Client will refresh the token as necessary.
+	//	client := conf.Client(ctx, &t)
+	//
+	//	resp, err := client.Get("https://api.freeagent.com/v2/projects")
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	} else {
+	//		log.Println(color.CyanString("Authentication successful\n"))
+	//	}
+	//	defer resp.Body.Close()
+	//
+	//	if resp.StatusCode == http.StatusOK {
+	//		bodyBytes, err2 := ioutil.ReadAll(resp.Body)
+	//		if err2 != nil {
+	//			log.Fatal(err2)
+	//		} else {
+	//			bodyString := string(bodyBytes)
+	//			log.Println(color.GreenString(bodyString))
+	//		}
+	//	}
+	//},
 }
 
 func init() {
