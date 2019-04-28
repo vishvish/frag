@@ -28,6 +28,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 )
 
 // loginCmd represents the login command
@@ -50,8 +51,8 @@ var (
 	conf         *oauth2.Config
 	ctx          context.Context
 	serviceName  = "io.koothooloo.frag."
-	clientID     = "***REMOVED***"
-	clientSecret = "***REMOVED***"
+	clientID     = os.Getenv("FREEAGENT_CLIENT_ID")
+	clientSecret = os.Getenv("FREEAGENT_CLIENT_SECRET")
 	fragUrl      string
 	srv          http.Server
 )
